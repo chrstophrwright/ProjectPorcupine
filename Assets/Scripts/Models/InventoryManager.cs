@@ -1,27 +1,29 @@
-﻿//=======================================================================
-// Copyright Martin "quill18" Glaude 2015-2016.
-//		http://quill18.com
-//=======================================================================
-
-using UnityEngine;
+#region License
+// ====================================================
+// Project Porcupine Copyright(C) 2016 Team Porcupine
+// This program comes with ABSOLUTELY NO WARRANTY; This is free software,
+// and you are welcome to redistribute it under certain conditions; See
+// file LICENSE, which is part of this source code package, for details.
+// ====================================================
+#endregion
 using System.Collections.Generic;
 using MoonSharp.Interpreter;
+using UnityEngine;
 
 [MoonSharpUserData]
 public class InventoryManager
 {
-
     // This is a list of all "live" inventories.
     // Later on this will likely be organized by rooms instead
     // of a single master list. (Or in addition to.)
-    public Dictionary< string, List<Inventory> > inventories;
+    public Dictionary<string, List<Inventory>> inventories;
 
     public InventoryManager()
     {
-        inventories = new Dictionary< string, List<Inventory> >();
+        inventories = new Dictionary<string, List<Inventory>>();
     }
 
-    void CleanupInventory(Inventory inv)
+    private void CleanupInventory(Inventory inv)
     {
         if (inv.stackSize == 0)
         {
@@ -29,24 +31,24 @@ public class InventoryManager
             {
                 inventories[inv.objectType].Remove(inv);
             }
+
             if (inv.tile != null)
             {
-                inv.tile.inventory = null;
+                inv.tile.Inventory = null;
                 inv.tile = null;
             }
+
             if (inv.character != null)
             {
                 inv.character.inventory = null;
                 inv.character = null;
             }
         }
-
     }
 
     public bool PlaceInventory(Tile tile, Inventory inv)
     {
-
-        bool tileWasEmpty = tile.inventory == null;
+        bool tileWasEmpty = tile.Inventory == null;
 
         if (tile.PlaceInventory(inv) == false)
         {
@@ -59,14 +61,14 @@ public class InventoryManager
         // We may also created a new stack on the tile, if the tile was previously empty.
         if (tileWasEmpty)
         {
-            if (inventories.ContainsKey(tile.inventory.objectType) == false)
+            if (inventories.ContainsKey(tile.Inventory.objectType) == false)
             {
-                inventories[tile.inventory.objectType] = new List<Inventory>();
+                inventories[tile.Inventory.objectType] = new List<Inventory>();
             }
 
-            inventories[tile.inventory.objectType].Add(tile.inventory);
+            inventories[tile.Inventory.objectType].Add(tile.Inventory);
 
-            World.current.OnInventoryCreated(tile.inventory);
+            World.current.OnInventoryCreated(tile.Inventory);
         }
 
         return true;
@@ -142,34 +144,47 @@ public class InventoryManager
     /// </summary>
     /// <returns>The closest inventory of type.</returns>
     /// <param name="objectType">Object type.</param>
-    /// <param name="t">T.</param>
-    /// <param name="desiredAmount">Desired amount. If no stack has enough, it instead returns the largest</param>
+    /// <param name="t">Tile from, which distance is mesured.</param>
+    /// <param name="desiredAmount">Desired amount. If no stack has enough, it instead returns the largest.</param>
     public Inventory GetClosestInventoryOfType(string objectType, Tile t, int desiredAmount, bool canTakeFromStockpile)
     {
         Path_AStar path = GetPathToClosestInventoryOfType(objectType, t, desiredAmount, canTakeFromStockpile);
-        return path.EndTile().inventory;
+        return path.EndTile().Inventory;
     }
 
-    public Path_AStar GetPathToClosestInventoryOfType(string objectType, Tile t, int desiredAmount, bool canTakeFromStockpile)
+    public bool QuickCheck(string objectType)
     {
         // If the inventories doesn't contain the objectType, we know that no
         // stacks of this type exists and can return.
         if (inventories.ContainsKey(objectType) == false)
         {
-            return null;
+            return false;
         }
 
         // We know that there is a list for objectType, we still need to test if
         // the list contains anything
         if (inventories[objectType].Count == 0)
         {
-            return null;
+            return false;
         }
+
+        return true;
+    }
+
+    public Path_AStar GetPathToClosestInventoryOfType(string objectType, Tile t, int desiredAmount, bool canTakeFromStockpile)
+    {
+        QuickCheck(objectType);
 
         // We can also avoid going through the Astar construction if we know
         // that all available inventories are stockpiles and we are not allowed
         // to touch those
-        if (!canTakeFromStockpile && inventories[objectType].TrueForAll(i => i.tile != null && i.tile.furniture != null && i.tile.furniture.IsStockpile()))
+        if (!canTakeFromStockpile && inventories[objectType].TrueForAll(i => i.tile != null && i.tile.Furniture != null && i.tile.Furniture.IsStockpile()))
+        {
+            return null;
+        }
+
+        // We shouldn't search if all inventories are locked.
+        if (inventories[objectType].TrueForAll(i => i.tile != null && i.tile.Furniture != null && i.tile.Inventory.isLocked))
         {
             return null;
         }

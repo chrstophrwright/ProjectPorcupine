@@ -1,4 +1,12 @@
-﻿using UnityEngine;
+#region License
+// ====================================================
+// Project Porcupine Copyright(C) 2016 Team Porcupine
+// This program comes with ABSOLUTELY NO WARRANTY; This is free software, 
+// and you are welcome to redistribute it under certain conditions; See 
+// file LICENSE, which is part of this source code package, for details.
+// ====================================================
+#endregion
+using UnityEngine;
 using System.Linq;
 using System.Collections;
 using UnityEngine.UI;
@@ -15,7 +23,7 @@ public class FurnitureBuildMenu : MonoBehaviour
     void Start()
     {
 
-        BuildModeController bmc = GameObject.FindObjectOfType<BuildModeController>();
+        BuildModeController bmc = WorldController.Instance.buildModeController;
 	
         // For each furniture prototype in our world, create one instance
         // of the button to be clicked!

@@ -1,8 +1,11 @@
-﻿//=======================================================================
-// Copyright Martin "quill18" Glaude 2015-2016.
-//		http://quill18.com
-//=======================================================================
-
+#region License
+// ====================================================
+// Project Porcupine Copyright(C) 2016 Team Porcupine
+// This program comes with ABSOLUTELY NO WARRANTY; This is free software, 
+// and you are welcome to redistribute it under certain conditions; See 
+// file LICENSE, which is part of this source code package, for details.
+// ====================================================
+#endregion
 using UnityEngine;
 using System.Collections.Generic;
 using System;
@@ -19,7 +22,8 @@ using MoonSharp.Interpreter;
 public enum TileType
 {
     Empty,
-    Floor
+    Floor,
+    Ladder
 };
 
 public enum ENTERABILITY
@@ -39,26 +43,28 @@ public class Tile :IXmlSerializable, ISelectable
         get { return _type; }
         set
         {
-            TileType oldType = _type;
-            _type = value;
-            // Call the callback and let things know we've changed.
-
-            if (cbTileChanged != null && oldType != _type)
+            if(_type != value)
             {
-                cbTileChanged(this);
+                _type = value;
+
+                // Call the callback and let things know we've changed.
+                if (cbTileChanged != null)
+                {
+                    cbTileChanged(this);
+                }
             }
         }
     }
 
     // LooseObject is something like a drill or a stack of metal sitting on the floor
-    public Inventory inventory;
+    public Inventory Inventory { get; set; }
 
-    public Room room;
+    public Room Room { get; set; }
 
-    public List<Character> characters;
+    public List<Character> Characters { get; set; }
 
     // Furniture is something like a wall, door, or sofa.
-    public Furniture furniture
+    public Furniture Furniture
     {
         get;
         protected set;
@@ -66,7 +72,7 @@ public class Tile :IXmlSerializable, ISelectable
 
     // FIXME: This seems like a terrible way to flag if a job is pending
     // on a tile.  This is going to be prone to errors in set/clear.
-    public Job pendingBuildJob;
+    public Job PendingBuildJob { get; set; }
 
     public int X { get; protected set; }
 
@@ -76,7 +82,7 @@ public class Tile :IXmlSerializable, ISelectable
     // might want to do more with in the future.
     const float baseTileMovementCost = 1;
 
-    public float movementCost
+    public float MovementCost
     {
         get
         {
@@ -85,10 +91,27 @@ public class Tile :IXmlSerializable, ISelectable
             //if (Type == TileType.Empty)
             //    return 0;	// 0 is unwalkable
 
-            if (furniture == null)
+            if(Type == TileType.Empty)
+            {
+                Tile[] ns = GetNeighbours();
+
+                bool canMove = false;
+
+                // Loop through all the horizontal/vertical neighbours of the empty tile.
+                foreach (Tile n in ns)
+                {
+                    // If the neighbour is a floor tile, set canMove to true.
+                    canMove = canMove || (n != null && (n.Type == TileType.Floor || n.Type == TileType.Ladder));
+                }
+
+                // If canMove is true, return baseTileMovementCost, else, return 0f.
+                return canMove ? baseTileMovementCost : 0f;
+            }
+
+            if (Furniture == null)
                 return baseTileMovementCost;
 
-            return baseTileMovementCost * furniture.movementCost;
+            return baseTileMovementCost * Furniture.movementCost;
         }
     }
 
@@ -98,24 +121,23 @@ public class Tile :IXmlSerializable, ISelectable
     /// <summary>
     /// Initializes a new instance of the <see cref="Tile"/> class.
     /// </summary>
-    /// <param name="World.current">A World.current instance.</param>
     /// <param name="x">The x coordinate.</param>
     /// <param name="y">The y coordinate.</param>
     public Tile(int x, int y)
     {
         this.X = x;
         this.Y = y;
-        characters = new List<Character>();
+        Characters = new List<Character>();
     }
 
     public bool UnplaceFurniture()
     {
         // Just uninstalling.  FIXME:  What if we have a multi-tile furniture?
 
-        if (furniture == null)
+        if (Furniture == null)
             return false;
 
-        Furniture f = furniture;
+        Furniture f = Furniture;
 
         for (int x_off = X; x_off < (X + f.Width); x_off++)
         {
@@ -123,7 +145,7 @@ public class Tile :IXmlSerializable, ISelectable
             {
 
                 Tile t = World.current.GetTileAt(x_off, y_off);
-                t.furniture = null;
+                t.Furniture = null;
             }
         }
 
@@ -150,7 +172,7 @@ public class Tile :IXmlSerializable, ISelectable
             {
 
                 Tile t = World.current.GetTileAt(x_off, y_off);
-                t.furniture = objInstance;
+                t.Furniture = objInstance;
 
             }
         }
@@ -162,27 +184,27 @@ public class Tile :IXmlSerializable, ISelectable
     {
         if (inv == null)
         {
-            inventory = null;
+            Inventory = null;
             return true;
         }
 
-        if (inventory != null)
+        if (Inventory != null)
         {
             // There's already inventory here. Maybe we can combine a stack?
 
-            if (inventory.objectType != inv.objectType)
+            if (Inventory.objectType != inv.objectType)
             {
                 Debug.LogError("Trying to assign inventory to a tile that already has some of a different type.");
                 return false;
             }
 
             int numToMove = inv.stackSize;
-            if (inventory.stackSize + numToMove > inventory.maxStackSize)
+            if (Inventory.stackSize + numToMove > Inventory.maxStackSize)
             {
-                numToMove = inventory.maxStackSize - inventory.stackSize;
+                numToMove = Inventory.maxStackSize - Inventory.stackSize;
             }
 
-            inventory.stackSize += numToMove;
+            Inventory.stackSize += numToMove;
             inv.stackSize -= numToMove;
 
             return true;
@@ -193,8 +215,8 @@ public class Tile :IXmlSerializable, ISelectable
         // the inventory manager needs to know that the old stack is now
         // empty and has to be removed from the previous lists.
 
-        inventory = inv.Clone();
-        inventory.tile = this;
+        Inventory = inv.Clone();
+        Inventory.tile = this;
         inv.stackSize = 0;
 
         return true;
@@ -208,7 +230,7 @@ public class Tile :IXmlSerializable, ISelectable
 
         // FIXME: I don't like having to manually and explicitly set
         // flags that preven conflicts. It's too easy to forget to set/clear them!
-        theJob.tile.pendingBuildJob = null;
+        theJob.tile.PendingBuildJob = null;
     }
 
     public void EqualiseGas(float leakFactor)
@@ -271,6 +293,22 @@ public class Tile :IXmlSerializable, ISelectable
         return ns;
     }
 
+    /// <summary>
+    /// If one of the 8 neighbouring tiles is of TileType type then this returns true.
+    /// </summary>
+    /// <param name="type"></param>
+    /// <returns></returns>
+    public bool HasNeighboursOfType(TileType type)
+    {
+        foreach (Tile tile in GetNeighbours(true))
+        {
+            if (tile.Type == type)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public XmlSchema GetSchema()
     {
@@ -281,7 +319,7 @@ public class Tile :IXmlSerializable, ISelectable
     {
         writer.WriteAttributeString("X", X.ToString());
         writer.WriteAttributeString("Y", Y.ToString());
-        writer.WriteAttributeString("RoomID", room == null ? "-1" : room.ID.ToString());
+        writer.WriteAttributeString("RoomID", Room == null ? "-1" : Room.ID.ToString());
         writer.WriteAttributeString("Type", ((int)Type).ToString());
     }
 
@@ -289,10 +327,10 @@ public class Tile :IXmlSerializable, ISelectable
     {
         // X and Y have already been read/processed
 
-        room = World.current.GetRoomFromID(int.Parse(reader.GetAttribute("RoomID")));
-        if (room != null)
+        Room = World.current.GetRoomFromID(int.Parse(reader.GetAttribute("RoomID")));
+        if (Room != null)
         {
-            room.AssignTile(this);
+            Room.AssignTile(this);
         }
 
         Type = (TileType)int.Parse(reader.GetAttribute("Type"));
@@ -303,13 +341,13 @@ public class Tile :IXmlSerializable, ISelectable
     public ENTERABILITY IsEnterable()
     {
         // This returns true if you can enter this tile right this moment.
-        if (movementCost == 0)
+        if (MovementCost == 0)
             return ENTERABILITY.Never;
 
         // Check out furniture to see if it has a special block on enterability
-        if (furniture != null)
+        if (Furniture != null)
         {
-            return furniture.IsEnterable();
+            return Furniture.IsEnterable();
         }
 
         return ENTERABILITY.Yes;

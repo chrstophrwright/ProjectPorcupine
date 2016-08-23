@@ -1,87 +1,113 @@
-﻿using UnityEngine;
+#region License
+// ====================================================
+// Project Porcupine Copyright(C) 2016 Team Porcupine
+// This program comes with ABSOLUTELY NO WARRANTY; This is free software, 
+// and you are welcome to redistribute it under certain conditions; See 
+// file LICENSE, which is part of this source code package, for details.
+// ====================================================
+#endregion
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
-public class PowerSystem {
+public class PowerSystem
+{
+    private readonly HashSet<IPowerRelated> powerGrid;
 
-
-    // List of furniture providing power into the system.
-    List<Furniture> powerGenerators;
-
-    List<Furniture> powerConsumers;
-
-    // Current Power in the system
-    float currentPower;
+    private float currentPower;
 
     public PowerSystem()
     {
-        powerGenerators = new List<Furniture>();
-        powerConsumers = new List<Furniture>();
+        powerGrid = new HashSet<IPowerRelated>();
     }
 
-    public void RegisterPowerSupply(Furniture furn)
-    {
-        powerGenerators.Add(furn);
-        CalculatePower();
+    public event Action<IPowerRelated> PowerLevelChanged;
 
-        furn.cbOnRemoved += RemovePowerSupply;
-    }
-
-    public void RemovePowerSupply(Furniture furn)
+    public float PowerLevel
     {
-        powerGenerators.Remove(furn);
-        CalculatePower();
-    }
-
-    public void RegisterPowerConsumer(Furniture furn)
-    {
-        if (currentPower < furn.powerValue)
+        get
         {
-            //Debug.LogWarning("Not enough power for " + furn.Name + " to run");
+            return currentPower;
+        }
+
+        private set
+        {
+            if (currentPower.Equals(value)) return;
+            currentPower = value;
+            NotifyPowerConsumers();
+        }
+    }
+
+    public bool AddToPowerGrid(IPowerRelated powerRelated)
+    {
+        if (PowerLevel + powerRelated.PowerValue < 0)
+        {
+            return false;
+        }
+
+        powerGrid.Add(powerRelated);
+        AdjustPowelLevel();
+        powerRelated.PowerValueChanged += OnPowerValueChanged;
+        Furniture furniture = powerRelated as Furniture;
+        if (furniture != null)
+        {            
+            furniture.cbOnRemoved += RemoveFromPowerGrid;
+        }
+
+        return true;
+    }
+
+    public void RemoveFromPowerGrid(IPowerRelated powerRelated)
+    {
+        powerGrid.Remove(powerRelated);
+        AdjustPowelLevel();
+    }
+
+    public bool RequestPower(IPowerRelated powerRelated)
+    {
+        return powerGrid.Contains(powerRelated);
+    }
+
+    private void AdjustPowelLevel()
+    {
+        PowerLevel = powerGrid.Sum(related => related.PowerValue);
+        if (PowerLevel < 0.0f)
+        {
+            RemovePowerConsumer();
+        }
+    }
+
+    private void RemovePowerConsumer()
+    {
+        IPowerRelated powerConsumer = powerGrid.FirstOrDefault(powerRelated => powerRelated.IsPowerConsumer);
+        if (powerConsumer == null)
+        {
             return;
         }
 
-        //Debug.Log("Added " + furn.Name + " to power consumer list");
-        powerConsumers.Add(furn);
-        CalculatePower();
-
-        furn.cbOnRemoved += RemovePowerConsumer;
+        RemoveFromPowerGrid(powerConsumer);
     }
 
-    public void RemovePowerConsumer(Furniture furn)
+    private void NotifyPowerConsumers()
     {
-        powerGenerators.Remove(furn);
-        CalculatePower();
+        foreach (IPowerRelated powerRelated in powerGrid.Where(powerRelated => powerRelated.IsPowerConsumer))
+        {
+            InvokePowerLevelChanged(powerRelated);
+        }
     }
 
-
-    public bool RequestPower(Furniture furn)
+    private void OnPowerValueChanged(IPowerRelated powerRelated)
     {
-        if (powerConsumers.Contains(furn))
-        {
-            return true;
-        }
-        
-        return false;
+        RemoveFromPowerGrid(powerRelated);
+        AddToPowerGrid(powerRelated);
     }
 
-    void CalculatePower()
+    private void InvokePowerLevelChanged(IPowerRelated powerRelated)
     {
-        float powerValues = 0;
-
-        foreach (Furniture furn in powerGenerators)
+        Action<IPowerRelated> handler = PowerLevelChanged;
+        if (handler != null)
         {
-            powerValues += furn.powerValue;
+            handler(powerRelated);
         }
-
-        foreach (Furniture furn in powerConsumers)
-        {
-            powerValues -= furn.powerValue;
-        }
-
-        currentPower = powerValues;
-
-        Debug.Log("Current Power level: " + currentPower);
     }
-
-
 }

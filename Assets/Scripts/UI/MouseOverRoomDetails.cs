@@ -1,4 +1,12 @@
-﻿using UnityEngine;
+#region License
+// ====================================================
+// Project Porcupine Copyright(C) 2016 Team Porcupine
+// This program comes with ABSOLUTELY NO WARRANTY; This is free software, 
+// and you are welcome to redistribute it under certain conditions; See 
+// file LICENSE, which is part of this source code package, for details.
+// ====================================================
+#endregion
+using UnityEngine;
 using System.Collections;
 using UnityEngine.UI;
 
@@ -24,7 +32,7 @@ public class MouseOverRoomDetails : MonoBehaviour
             return;
         }
 
-        mouseController = GameObject.FindObjectOfType<MouseController>();
+        mouseController = WorldController.Instance.mouseController;
         if (mouseController == null)
         {
             Debug.LogError("How do we not have an instance of mouse controller?");
@@ -37,7 +45,7 @@ public class MouseOverRoomDetails : MonoBehaviour
     {
         Tile t = mouseController.GetMouseOverTile();
 
-        if (t == null || t.room == null)
+        if (t == null || t.Room == null)
         {
             myText.text = "";
             return;
@@ -45,9 +53,9 @@ public class MouseOverRoomDetails : MonoBehaviour
 
         string s = "";
 
-        foreach (string g in t.room.GetGasNames())
+        foreach (string g in t.Room.GetGasNames())
         {
-            s += g + ": " + t.room.GetGasPressure(g) + " (" + (t.room.GetGasPercentage(g) * 100) + "%) ";
+            s += g + ": " + t.Room.GetGasPressure(g) + " (" + (t.Room.GetGasPercentage(g) * 100) + "%) ";
         }
 
         myText.text = s;
