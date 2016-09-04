@@ -6,42 +6,56 @@
 // file LICENSE, which is part of this source code package, for details.
 // ====================================================
 #endregion
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
-using System.Collections;
 
 public class ConstructionMenu : MonoBehaviour
 {
-
     // The sub menus of the build menu (furniture, floor..... later - power, security, drones).
     public GameObject furnitureMenu;
     public GameObject floorMenu;
 
     public Button buttonFloors;
     public Button buttonFurniture;
+    public Button buttonDeconstruction;
 
-    void OnEnable()
+    private BuildModeController bmc;
+
+    private GameObject[] furnitureSubs;
+
+    private GameObject[] FurnitureSubs
     {
-        // Add liseners here.
-        buttonFloors.onClick.AddListener(delegate
+        get
+        {
+            if (furnitureSubs == null)
             {
-                OnClickFloors();
-            });
-        buttonFurniture.onClick.AddListener(delegate
-            {
-                OnClickFurniture();
-            });
+                furnitureSubs = new GameObject[]
+                {
+                    // add every furniture submenu here
+                    furnitureMenu, floorMenu
+                };
+            }
+
+            return furnitureSubs;
+        }
+    }
+
+    public void OnClickDeconstruct()
+    {
+        DeactivateSubs();
+        bmc.SetMode_Deconstruct();
     }
 
     public void OnClickFloors()
     {
-        DeactivateSubs();
+        DeactivateSubsExcept(floorMenu);
         ToggleMenu(floorMenu);
     }
 
     public void OnClickFurniture()
     {
-        DeactivateSubs();
+        DeactivateSubsExcept(furnitureMenu);
         ToggleMenu(furnitureMenu);
     }
 
@@ -56,5 +70,41 @@ public class ConstructionMenu : MonoBehaviour
     public void ToggleMenu(GameObject menu)
     {
         menu.SetActive(!menu.activeSelf);
+    }
+
+    public void DeactivateSubsExcept(GameObject menu)
+    {
+        foreach (GameObject subMenu in FurnitureSubs)
+        {
+            if (subMenu != menu)
+            {
+                subMenu.SetActive(false);
+            }
+        }
+    }
+
+    private void Start()
+    {
+        bmc = WorldController.Instance.buildModeController;
+
+        MenuController cm = GameObject.Find("MenuBottom").GetComponent<MenuController>();
+
+        furnitureMenu = cm.furnitureMenu;
+        floorMenu = cm.floorMenu;
+
+        // Add liseners here.
+        buttonDeconstruction.onClick.AddListener(delegate
+        {
+            OnClickDeconstruct();
+        });
+
+        buttonFloors.onClick.AddListener(delegate
+        {
+            OnClickFloors();
+        });
+        buttonFurniture.onClick.AddListener(delegate
+        {
+            OnClickFurniture();
+        });
     }
 }

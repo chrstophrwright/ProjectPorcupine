@@ -14,7 +14,7 @@ using UnityEngine;
 
 public class WorldGenerator
 {
-    public const TileType AsteroidFloorType = TileType.Floor;
+    public static TileType AsteroidFloorType = null;
 
     public static int startAreaWidth = 0;
     public static int startAreaHeight = 0;
@@ -32,13 +32,21 @@ public class WorldGenerator
 
     public static void Generate(World world, int seed)
     {
+        AsteroidFloorType = TileType.GetTileType("Floor");
+
         ReadXML();
         Random.InitState(seed);
         int width = world.Width;
         int height = world.Height;
+        int depth = world.Depth;
+        int offsetX = Random.Range(0, 10000);
+        int offsetY = Random.Range(0, 10000);
 
-        int xOffset = Random.Range(0, 10000);
-        int yOffset = Random.Range(0, 10000);
+        int sumOfAllWeightedChances = 0;
+        foreach (Inventory resource in resources)
+        {
+            sumOfAllWeightedChances += resource.StackSize;
+        }
 
         for (int x = 0; x < startAreaWidth; x++)
         {
@@ -47,8 +55,8 @@ public class WorldGenerator
                 int worldX = (width / 2) - startAreaCenterX + x;
                 int worldY = (height / 2) + startAreaCenterY - y;
 
-                Tile tile = world.GetTileAt(worldX, worldY);
-                tile.Type = (TileType)startAreaTiles[x, y];
+                Tile tile = world.GetTileAt(worldX, worldY, 0);
+                tile.Type = TileType.GetTileTypes()[startAreaTiles[x, y]];
             }
         }
 
@@ -59,7 +67,7 @@ public class WorldGenerator
                 int worldX = (width / 2) - startAreaCenterX + x;
                 int worldY = (height / 2) + startAreaCenterY - y;
 
-                Tile tile = world.GetTileAt(worldX, worldY);
+                Tile tile = world.GetTileAt(worldX, worldY, 0);
 
                 if (startAreaFurnitures[x, y] != null && startAreaFurnitures[x, y] != string.Empty)
                 {
@@ -68,50 +76,54 @@ public class WorldGenerator
             }
         }
 
-        for (int x = 0; x < width; x++)
+        for (int z = 0; z < depth; z++)
         {
-            for (int y = 0; y < height; y++)
+            float zScale = Mathf.Lerp(1f, .5f, Mathf.Abs((depth / 2f) - z) / depth);
+            for (int x = 0; x < width; x++)
             {
-                float noiseValue = Mathf.PerlinNoise((x + xOffset) / (width * asteroidNoiseScale), (y + yOffset) / (height * asteroidNoiseScale));
-                if (noiseValue >= asteroidNoiseThreshhold && !IsStartArea(x, y, world))
+                for (int y = 0; y < height; y++)
                 {
-                    Tile t = world.GetTileAt(x, y);
-                    t.Type = AsteroidFloorType;
-
-                    if (Random.value <= asteroidResourceChance && t.Furniture == null)
-                    {
-                        if (resources.Length > 0)
+                        float noiseValue = Mathf.PerlinNoise((x + offsetX) / (width * asteroidNoiseScale * zScale), (y + offsetY) / (height * asteroidNoiseScale * zScale));
+                        if (noiseValue >= asteroidNoiseThreshhold && !IsStartArea(x, y, world))
                         {
-                            int currentchance = 0;
-                            int randomchance = Random.Range(0, 100);
+                            Tile t = world.GetTileAt(x, y, z);
+                            t.Type = AsteroidFloorType;
 
-                            for (int i = 0; i < resources.Length; i++)
+                            if (Random.value <= asteroidResourceChance && t.Furniture == null)
                             {
-                                Inventory inv = resources[i];
-
-                                int chance = inv.stackSize; // In stacksize the chance was cached
-                                currentchance += chance;
-
-                                if (randomchance <= currentchance)
+                                if (resources.Length > 0)
                                 {
-                                    int stackSize = Random.Range(resourceMin[i], resourceMax[i]);
+                                    int currentweight = 0;
+                                    int randomweight = Random.Range(0, sumOfAllWeightedChances);
 
-                                    if (stackSize > inv.maxStackSize)
+                                    for (int i = 0; i < resources.Length; i++)
                                     {
-                                        stackSize = inv.maxStackSize;
-                                    }
+                                        Inventory inv = resources[i];
 
-                                    world.inventoryManager.PlaceInventory(t, new Inventory(inv.objectType, inv.maxStackSize, stackSize));
-                                    break;
+                                        int weight = inv.StackSize; // In stacksize the weight was cached
+                                        currentweight += weight;
+
+                                        if (randomweight <= currentweight)
+                                        {
+                                            int stackSize = Random.Range(resourceMin[i], resourceMax[i]);
+
+                                            if (stackSize > inv.maxStackSize)
+                                            {
+                                                stackSize = inv.maxStackSize;
+                                            }
+
+                                            world.inventoryManager.PlaceInventory(t, new Inventory(inv.objectType, inv.maxStackSize, stackSize));
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
         }
     }
-
+    
     public static bool IsStartArea(int x, int y, World world)
     {
         int boundX = (world.Width / 2) - startAreaCenterX;
@@ -172,7 +184,7 @@ public class WorldGenerator
                                         res.Add(new Inventory(
                                                 res_reader.GetAttribute("objectType"),
                                                 int.Parse(res_reader.GetAttribute("maxStack")),
-                                                (int)(float.Parse(res_reader.GetAttribute("chance")) * 100)));
+                                                Mathf.CeilToInt(float.Parse(res_reader.GetAttribute("weightedChance")))));
 
                                         resMin.Add(int.Parse(res_reader.GetAttribute("min")));
                                         resMax.Add(int.Parse(res_reader.GetAttribute("max")));
@@ -189,12 +201,13 @@ public class WorldGenerator
                 }
                 catch (System.Exception e)
                 {
+                    // Leaving this in because UberLogger doesn't handle multiline messages  
                     Debug.LogError("Error reading WorldGenerator/Asteroid" + System.Environment.NewLine + "Exception: " + e.Message + System.Environment.NewLine + "StackTrace: " + e.StackTrace);
                 }
             }
             else
             {
-                Debug.LogError("Did not find a 'Asteroid' element in the WorldGenerator definition file.");
+                Debug.ULogErrorChannel("WorldGenerator", "Did not find a 'Asteroid' element in the WorldGenerator definition file.");
             }
 
             if (reader.ReadToNextSibling("StartArea"))
@@ -221,7 +234,7 @@ public class WorldGenerator
 
                                 if (splittedString.Length < startAreaWidth * startAreaHeight)
                                 {
-                                    Debug.LogError("Error reading 'Tiles' array to short: " + splittedString.Length + " !");
+                                    Debug.ULogErrorChannel("WorldGenerator", "Error reading 'Tiles' array to short: " + splittedString.Length + " !");
                                     break;
                                 }
 
@@ -260,12 +273,12 @@ public class WorldGenerator
             }
             else
             {
-                Debug.LogError("Did not find a 'StartArea' element in the WorldGenerator definition file.");
+                Debug.ULogErrorChannel("WorldGenerator", "Did not find a 'StartArea' element in the WorldGenerator definition file.");
             }
         }
         else
         {
-            Debug.LogError("Did not find a 'WorldGenerator' element in the WorldGenerator definition file.");
+            Debug.ULogErrorChannel("WorldGenerator", "Did not find a 'WorldGenerator' element in the WorldGenerator definition file.");
         }
     }
 }

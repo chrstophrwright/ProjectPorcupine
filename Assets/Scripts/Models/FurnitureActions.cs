@@ -7,6 +7,7 @@
 // ====================================================
 #endregion
 using System.Collections.Generic;
+using System.IO;
 using MoonSharp.Interpreter;
 using MoonSharp.Interpreter.Debugging;
 using MoonSharp.RemoteDebugger;
@@ -15,66 +16,66 @@ using UnityEngine;
 
 public class FurnitureActions
 {
-    private static FurnitureActions _Instance;
-
-    private Script myLuaScript;
-
     public FurnitureActions()
     {
-        // Tell the LUA interpreter system to load all the classes
-        // that we have marked as [MoonSharpUserData]
-        UserData.RegisterAssembly();
+        // TODO: This should be moved to a more logical location
+        LuaUtilities.RegisterGlobal(typeof(Inventory));
+        LuaUtilities.RegisterGlobal(typeof(Job));
+        LuaUtilities.RegisterGlobal(typeof(ModUtils));
+        LuaUtilities.RegisterGlobal(typeof(World));
+        LuaUtilities.RegisterGlobal(typeof(WorldController));
+        LuaUtilities.RegisterGlobal(typeof(Power.Connection));
 
-        _Instance = this;
-
-        myLuaScript = new Script();
-
-        // If we want to be able to instantiate a new object of a class
-        //   i.e. by doing    SomeClass.__new()
-        // We need to make the base type visible.
-        myLuaScript.Globals["Inventory"] = typeof(Inventory);
-        myLuaScript.Globals["Job"] = typeof(Job);
-
-        // Also to access statics/globals
-        myLuaScript.Globals["World"] = typeof(World);
+        LoadScripts();
     }
 
-    public static void addScript(string rawLuaCode)
+    public static void LoadScripts()
     {
-        _Instance.myLuaScript.DoString(rawLuaCode);
+        string luaFilePath = Path.Combine(Application.streamingAssetsPath, "LUA");
+        luaFilePath = Path.Combine(luaFilePath, "Furniture.lua");
+        LuaUtilities.LoadScriptFromFile(luaFilePath);
     }
 
-    public static void CallFunctionsWithFurniture(string[] functionNames, Furniture furn, float deltaTime)
+    public static void LoadModsScripts(DirectoryInfo[] mods)
     {
-        foreach (string fn in functionNames)
+        foreach (DirectoryInfo mod in mods)
         {
-            object func = _Instance.myLuaScript.Globals[fn];
-
-            if (func == null)
+            string luaModFile = Path.Combine(mod.FullName, "Furniture.lua");
+            if (File.Exists(luaModFile))
             {
-                Debug.LogError("'" + fn + "' is not a LUA function.");
-                return;
-            }
-
-            DynValue result = _Instance.myLuaScript.Call(func, furn, deltaTime);
-
-            if (result.Type == DataType.String)
-            {
-                Debug.Log(result.String);
+                LuaUtilities.LoadScriptFromFile(luaModFile);
             }
         }
     }
 
-    public static DynValue CallFunction(string functionName, params object[] args)
+    public static void CallFunctionsWithFurniture<T>(string[] functionNames, T furn, float deltaTime)
     {
-        object func = _Instance.myLuaScript.Globals[functionName];
+        if (furn == null)
+        {
+            // These errors are about the lua code so putting themin the Lua channel.
+            Debug.ULogErrorChannel("Lua", "Furn is null, cannot call LUA function (something is fishy).");
+        }
 
-        return _Instance.myLuaScript.Call(func, args);
+        foreach (string fn in functionNames)
+        {
+            if (fn == null)
+            {
+                Debug.ULogErrorChannel("Lua", "'" + fn + "' is not a LUA function.");
+                return;
+            }
+            
+            DynValue result = LuaUtilities.CallFunction(fn, furn, deltaTime);
+            
+            if (result.Type == DataType.String)
+            {
+                Debug.ULogErrorChannel("Lua", result.String);
+            }
+        }
     }
-
+    
     public static void JobComplete_FurnitureBuilding(Job theJob)
     {
-        WorldController.Instance.world.PlaceFurniture(theJob.jobObjectType, theJob.tile);
+        WorldController.Instance.World.PlaceFurniture(theJob.JobObjectType, theJob.tile);
 
         // FIXME: I don't like having to manually and explicitly set
         // flags that preven conflicts. It's too easy to forget to set/clear them!
